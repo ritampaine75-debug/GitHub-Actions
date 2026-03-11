@@ -7,6 +7,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import Select
 
 # কনফিগারেশন
 URL = "https://krishakbandhu.wb.gov.in/agricultural-labour/farmer_search"
@@ -16,11 +17,11 @@ SENDER_PASS = os.environ.get('EMAIL_PASS')
 
 def get_farmer_data():
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new") # নতুন হেডলেস মোড
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    # আসল মানুষের মতো দেখানোর জন্য User-Agent
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+    # এটি আসল ব্রাউজারের মতো কাজ করতে সাহায্য করবে
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
     
     driver = webdriver.Chrome(options=chrome_options)
     results = []
@@ -28,33 +29,39 @@ def get_farmer_data():
     try:
         for search_id in SEARCH_IDS:
             driver.get(URL)
-            time.sleep(3) # পেজ লোড হওয়ার জন্য সময়
+            time.sleep(5) # পেজ লোড হতে সময় দিন
             
             try:
-                # ভোটার আইডি ইনপুট বক্স খোঁজা
-                search_box = WebDriverWait(driver, 15).until(
-                    EC.presence_of_element_located((By.NAME, "voter_id")) 
+                # ১. আইডি টাইপ ড্রপডাউন থেকে 'Voter ID' সিলেক্ট করা
+                # লক্ষ্য করুন: সাইটে আইডি ড্রপডাউন থাকলে এটি কাজ করবে
+                dropdown = WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.ID, "id_type")) # আইডিটি চেক করুন
                 )
-                search_box.clear()
-                search_box.send_keys(search_id)
+                select = Select(dropdown)
+                select.select_by_index(1) # প্রথম অপশন সিলেক্ট করবে
                 
-                # সার্চ বাটন ক্লিক
-                search_btn = driver.find_element(By.ID, "btnSearch")
+                # ২. ইনপুট বক্সে নাম্বার লেখা
+                input_field = driver.find_element(By.NAME, "voter_id")
+                input_field.clear()
+                input_field.send_keys(search_id)
+                
+                # ৩. সার্চ বাটনে ক্লিক
+                search_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
                 search_btn.click()
                 
-                time.sleep(5) # রেজাল্ট আসার জন্য অপেক্ষা
+                time.sleep(5) # রেজাল্ট লোড হতে সময় দিন
                 
-                # ফলাফল কপি করা
-                result_element = driver.find_element(By.TAG_BODY)
-                result_text = result_element.text
+                # ৪. টেবিল থেকে ডাটা নেওয়া
+                result_area = driver.find_element(By.TAG_NAME, "body").text
                 
-                if "No Record Found" in result_text:
-                    status = "কোন রেকর্ড পাওয়া যায়নি"
+                if "No Record Found" in result_area:
+                    status = "কোন তথ্য পাওয়া যায়নি (No Record Found)"
                 else:
-                    status = "তথ্য পাওয়া গেছে! দয়া করে ওয়েবসাইট চেক করুন।"
+                    # এখানে আপনি চাইলে টেবিলের নির্দিষ্ট অংশ কাটতে পারেন
+                    status = "সফল! তথ্য পাওয়া গেছে।"
                 
             except Exception as e:
-                status = f"এরর: {str(e)}"
+                status = f"এরর: এলিমেন্ট খুঁজে পাওয়া যায়নি। ওয়েবসাইট লোড হতে সমস্যা হচ্ছে।"
             
             results.append(f"ID: {search_id}\nফলাফল: {status}\n" + "-"*30)
             
@@ -64,25 +71,17 @@ def get_farmer_data():
     return "\n\n".join(results)
 
 def send_email(content):
-    if not SENDER_EMAIL or not SENDER_PASS:
-        print("Email credentials not found in Secrets!")
-        return
-
+    if not SENDER_EMAIL or not SENDER_PASS: return
     msg = EmailMessage()
-    msg.set_content(f"নমস্কার,\n\nআপনার আজকের কৃষক বন্ধু সার্চ রিপোর্ট নিচে দেওয়া হলো:\n\n{content}\n\nধন্যবাদ,\nআপনার অটোমেশন বট")
-    msg['Subject'] = "Daily Krishak Bandhu Report"
+    msg.set_content(f"নমস্কার,\n\nরিপোর্ট:\n\n{content}\n\nধন্যবাদ।")
+    msg['Subject'] = "Daily Farmer Search Report"
     msg['From'] = SENDER_EMAIL
     msg['To'] = SENDER_EMAIL
-
-    try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(SENDER_EMAIL, SENDER_PASS)
-            smtp.send_message(msg)
-        print("Email sent successfully!")
-    except Exception as e:
-        print(f"Failed to send email: {e}")
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+        smtp.login(SENDER_EMAIL, SENDER_PASS)
+        smtp.send_message(msg)
 
 if __name__ == "__main__":
-    report_data = get_farmer_data()
-    send_email(report_data)
+    report = get_farmer_data()
+    send_email(report)
     
