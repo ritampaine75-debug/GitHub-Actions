@@ -1,24 +1,21 @@
 name: Daily Farmer Search
 on:
   schedule:
-    - cron: '0 4 * * *' # Runs every day at 4:00 AM UTC
-  workflow_dispatch:
+    - cron: '0 4 * * *' # প্রতিদিন ভারতীয় সময় সকাল ৯:৩০ মিনিটে (প্রায়)
+  workflow_dispatch: # ম্যানুয়ালি চালানোর জন্য
 
 jobs:
   run-search:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4 # v3 থেকে v4 এ আপডেট করা হয়েছে
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # v4 থেকে v5 এ আপডেট করা হয়েছে
         with:
           python-version: '3.9'
-      - name: Install Chrome
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
       - name: Install Dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install selenium webdriver-manager
       - name: Run Script
         env:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
